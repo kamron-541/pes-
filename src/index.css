@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+* {
+  font-family: 'Inter', sans-serif;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #0f0c1e;
+  color: #e2e8f0;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1630;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6d28d9;
+  border-radius: 3px;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { border-color: #f87171; box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+
+.overdue-card {
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes countdown-warn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.warn-blink {
+  animation: countdown-warn 1s ease-in-out infinite;
+}
