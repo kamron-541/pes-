@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Zap, Flame, Sun, Droplet, Plus, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Zap, Flame, Droplets, Lightbulb, Plus, CheckCircle, Clock, Trash2, X, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { STORAGE_KEYS, DEFAULT_UTILITIES, ENABLE_SUPABASE, loadLocal, saveLocal, safeSupabaseSync } from '../lib/storage';
 
 const typeIcons = {
   electricity: Zap,
   gas: Flame,
-  light: Sun,
-  water: Droplet,
+  light: Lightbulb,
+  water: Droplets,
 };
 
 const typeLabels = {
-  electricity: 'Elektr energiyasi',
+  electricity: 'Elektr energiyasi (Tok)',
   gas: 'Gaz',
   light: 'Svet (yoritish)',
   water: 'Suv',
@@ -21,29 +21,36 @@ function formatMoney(num) {
   return (num || 0).toLocaleString('uz-UZ') + " so'm";
 }
 
-export default function Utilities() {
-  const [utilities, setUtilities] = useState(() => loadLocal(STORAGE_KEYS.UTILITIES, DEFAULT_UTILITIES));
+export default function Utilities({ clubId, currentClub }) {
+  const [utilities, setUtilities] = useState(() => loadLocal(STORAGE_KEYS.UTILITIES, DEFAULT_UTILITIES, clubId));
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ type: 'electricity', amount: '', month: 'Oktabr 2026' });
 
   useEffect(() => {
+    setUtilities(loadLocal(STORAGE_KEYS.UTILITIES, DEFAULT_UTILITIES, clubId));
     if (ENABLE_SUPABASE) {
       fetchBackgroundUtilities();
     }
-  }, []);
+  }, [clubId]);
 
   const fetchBackgroundUtilities = async () => {
     if (!ENABLE_SUPABASE) return;
     try {
       if (!supabase) return;
-      const { data } = await supabase
+      let query = supabase
         .from('utilities')
         .select('*')
         .order('id', { ascending: false });
+
+      if (clubId) {
+        query = query.eq('club_id', clubId);
+      }
+
+      const { data } = await query;
       if (data && data.length > 0) {
         setUtilities(data);
-        saveLocal(STORAGE_KEYS.UTILITIES, data);
+        saveLocal(STORAGE_KEYS.UTILITIES, data, clubId);
       }
     } catch (err) {
       console.debug('Utilities Supabase sync skipped:', err?.message || err);
@@ -65,8 +72,8 @@ export default function Utilities() {
 
     const updated = [newUtil, ...utilities];
     setUtilities(updated);
-    saveLocal(STORAGE_KEYS.UTILITIES, updated);
-    safeSupabaseSync(() => supabase.from('utilities').insert([newUtil]));
+    saveLocal(STORAGE_KEYS.UTILITIES, updated, clubId);
+    safeSupabaseSync(() => supabase.from('utilities').insert([{ ...newUtil, club_id: clubId }]));
 
     setForm({ type: 'electricity', amount: '', month: 'Oktabr 2026' });
     setShowForm(false);
@@ -75,15 +82,15 @@ export default function Utilities() {
   const handleTogglePaid = async (id, currentPaid) => {
     const updated = utilities.map(u => u.id === id ? { ...u, paid: !currentPaid } : u);
     setUtilities(updated);
-    saveLocal(STORAGE_KEYS.UTILITIES, updated);
-    safeSupabaseSync(() => supabase.from('utilities').update({ paid: !currentPaid }).eq('id', id));
+    saveLocal(STORAGE_KEYS.UTILITIES, updated, clubId);
+    safeSupabaseSync(() => supabase.from('utilities').update({ paid: !currentPaid }).eq('id', id).eq('club_id', clubId));
   };
 
   const handleDelete = async (id) => {
     const updated = utilities.filter(u => u.id !== id);
     setUtilities(updated);
-    saveLocal(STORAGE_KEYS.UTILITIES, updated);
-    safeSupabaseSync(() => supabase.from('utilities').delete().eq('id', id));
+    saveLocal(STORAGE_KEYS.UTILITIES, updated, clubId);
+    safeSupabaseSync(() => supabase.from('utilities').delete().eq('id', id).eq('club_id', clubId));
   };
 
   // Metrics
@@ -94,144 +101,168 @@ export default function Utilities() {
   return (
     <div className="p-6 min-h-screen">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+              <Building2 size={12} />
+              {currentClub?.name || "Filial"}
+            </span>
+            <span className="text-slate-400 text-xs">Kommunal hisob-kitoblar</span>
+          </div>
           <h1 className="text-white text-2xl font-bold">Kommunal to'lovlar</h1>
-          <p className="text-slate-400 text-sm mt-1">Klubning gaz, svet, suv va yoritish xarajatlari (LocalStorage da saqlanadi)</p>
+          <p className="text-slate-400 text-sm mt-1">Ushbu filialning gaz, svet, suv va yoritish xarajatlari</p>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 transition shadow-lg shadow-violet-900/40 cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 transition shadow-lg shadow-violet-900/40 cursor-pointer self-start sm:self-auto"
         >
           <Plus size={16} /> Yangi to'lov qo'shish
         </button>
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        {[
-          { label: "Jami xarajat", value: totalAmount, color: 'text-violet-400', bg: 'bg-[#1a1630]' },
-          { label: "To'langan", value: paidAmount, color: 'text-emerald-400', bg: 'bg-emerald-950/20 border-emerald-900/40' },
-          { label: "To'lanmagan", value: unpaidAmount, color: 'text-rose-400', bg: 'bg-rose-950/20 border-rose-900/40' },
-        ].map((item, idx) => (
-          <div key={idx} className={`rounded-2xl p-5 border border-[#2d2556] ${item.bg}`}>
-            <p className="text-slate-500 text-xs mb-1 font-medium">{item.label}</p>
-            <p className={`text-xl font-bold ${item.color}`}>{formatMoney(item.value)}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="rounded-2xl bg-[#1a1630] border border-[#2d2556] p-5">
+          <p className="text-slate-400 text-xs mb-1">Jami hisoblangan</p>
+          <p className="text-white text-xl font-bold">{formatMoney(totalAmount)}</p>
+        </div>
+        <div className="rounded-2xl bg-[#1a1630] border border-[#2d2556] p-5">
+          <p className="text-slate-400 text-xs mb-1">To'langan summa</p>
+          <p className="text-emerald-400 text-xl font-bold">{formatMoney(paidAmount)}</p>
+        </div>
+        <div className="rounded-2xl bg-[#1a1630] border border-[#2d2556] p-5">
+          <p className="text-slate-400 text-xs mb-1">To'lanmagan (Qarz)</p>
+          <p className="text-rose-400 text-xl font-bold">{formatMoney(unpaidAmount)}</p>
+        </div>
       </div>
 
-      {loading ? (
-        <div className="text-center py-10">
-          <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p className="text-slate-400 text-xs">Yuklanmoqda...</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {utilities.map((u) => {
-            const Icon = typeIcons[u.type] || Zap;
-            return (
-              <div key={u.id} className={`flex items-center gap-4 p-5 rounded-2xl border transition ${u.paid ? 'bg-[#1a1630]/60 border-[#2d2556]/60' : 'bg-[#1a1630] border-[#392e6e]'}`}>
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${u.paid ? 'bg-emerald-950/40 text-emerald-400' : 'bg-rose-950/40 text-rose-400'}`}>
-                  <Icon size={24} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-white font-bold text-sm truncate">{u.name}</p>
-                    <span className="text-[10px] text-slate-500 font-medium">({u.month})</span>
-                  </div>
-                  <p className="text-white font-semibold text-lg">{formatMoney(u.amount)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleTogglePaid(u.id, u.paid)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer
-                      ${u.paid 
-                        ? 'bg-emerald-900/20 text-emerald-400 border-emerald-800/30' 
-                        : 'bg-amber-900/20 text-amber-500 border-amber-800/30 hover:bg-amber-900/40'}`}
-                  >
-                    {u.paid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                    {u.paid ? "To'langan" : "To'lash"}
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(u.id)}
-                    className="p-2 text-slate-500 hover:text-red-400 transition cursor-pointer"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          {utilities.length === 0 && (
-            <div className="col-span-2 rounded-2xl bg-[#1a1630] border border-[#2d2556] p-10 text-center">
-              <p className="text-slate-500 text-sm">Hech qanday kommunal to'lov mavjud emas</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Add Modal */}
+      {/* Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#1a1630] border border-[#2d2556] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-white font-bold text-lg mb-5">Yangi kommunal to'lov</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[#1a1630] border border-[#2d2556] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-white font-semibold text-lg">Yangi kommunal to'lov</h2>
+              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-slate-400 text-xs mb-1">Turi</label>
                 <select
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500"
+                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500 transition"
                 >
-                  <option value="electricity">Elektr energiyasi</option>
+                  <option value="electricity">Elektr energiyasi (Tok)</option>
                   <option value="gas">Gaz</option>
-                  <option value="light">Svet (yoritish)</option>
+                  <option value="light">Svet (Yoritish)</option>
                   <option value="water">Suv</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-slate-400 text-xs mb-1">Summa (so'm)</label>
+                <label className="block text-slate-400 text-xs mb-1">Summa (so'mda)</label>
                 <input
                   type="number"
                   required
-                  placeholder="Masalan: 120000"
+                  placeholder="Masalan: 350000"
                   value={form.amount}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500"
+                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500 transition"
                 />
               </div>
-
               <div>
-                <label className="block text-slate-400 text-xs mb-1">Oy</label>
+                <label className="block text-slate-400 text-xs mb-1">Qaysi oy uchun</label>
                 <input
+                  type="text"
                   required
+                  placeholder="Masalan: Oktabr 2026"
                   value={form.month}
                   onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
-                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500"
+                  className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-violet-500 transition"
                 />
               </div>
-
               <div className="flex gap-3 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setShowForm(false)} 
-                  className="flex-1 py-2.5 rounded-xl bg-[#2d2556] text-slate-300 text-sm hover:bg-[#3d3470] transition select-none cursor-pointer"
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#251f47] text-slate-300 text-sm font-semibold hover:text-white transition"
                 >
-                  Bekor
+                  Bekor qilish
                 </button>
-                <button 
-                  type="submit" 
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 transition shadow-lg shadow-violet-900/40 select-none cursor-pointer"
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:from-violet-500 hover:to-indigo-500 transition shadow-lg shadow-violet-900/40"
                 >
-                  Saqlash
+                  Qo'shish
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Ro'yxat */}
+      <div className="rounded-2xl bg-[#1a1630] border border-[#2d2556] overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-[#2d2556] text-slate-400 text-xs">
+              <th className="py-3.5 px-5">To'lov turi</th>
+              <th className="py-3.5 px-5">Oy</th>
+              <th className="py-3.5 px-5 text-right">Summa</th>
+              <th className="py-3.5 px-5 text-center">Holat</th>
+              <th className="py-3.5 px-5 text-right">Amallar</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#2d2556]/50">
+            {utilities.map(u => {
+              const Icon = typeIcons[u.type] || Zap;
+              return (
+                <tr key={u.id} className="hover:bg-[#201b3d]/50 transition">
+                  <td className="py-3.5 px-5 text-white font-medium flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-violet-600/20 text-violet-400 flex items-center justify-center">
+                      <Icon size={16} />
+                    </div>
+                    <span>{u.name}</span>
+                  </td>
+                  <td className="py-3.5 px-5 text-slate-300 font-mono text-xs">{u.month}</td>
+                  <td className="py-3.5 px-5 text-right font-bold text-white">
+                    {formatMoney(u.amount)}
+                  </td>
+                  <td className="py-3.5 px-5 text-center">
+                    <button
+                      onClick={() => handleTogglePaid(u.id, u.paid)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                        u.paid
+                          ? 'bg-emerald-950/40 text-emerald-400 border-emerald-700/40'
+                          : 'bg-rose-950/40 text-rose-400 border-rose-700/40'
+                      }`}
+                    >
+                      {u.paid ? 'To\'langan' : 'To\'lanmagan'}
+                    </button>
+                  </td>
+                  <td className="py-3.5 px-5 text-right">
+                    <button
+                      onClick={() => handleDelete(u.id)}
+                      className="text-xs text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-red-950/40 transition cursor-pointer"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {utilities.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
+                  Ushbu filialda hozircha kommunal to'lovlar mavjud emas
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

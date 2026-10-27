@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Clock, Users, ArrowUpRight, ArrowDownRight, Receipt, Calendar, FileText } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Clock, Users, ArrowUpRight, ArrowDownRight, Receipt, Calendar, FileText, Building2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { STORAGE_KEYS, DEFAULT_PAYMENTS, DEFAULT_CLIENTS, ENABLE_SUPABASE, loadLocal, saveLocal } from '../lib/storage'
 
@@ -17,36 +17,53 @@ function formatDate(isoStr) {
     }
 }
 
-export default function Statistics() {
-    const [payments, setPayments] = useState(() => loadLocal(STORAGE_KEYS.PAYMENTS, DEFAULT_PAYMENTS))
+export default function Statistics({ clubId, currentClub, isSuperAdmin }) {
+    const [payments, setPayments] = useState(() => loadLocal(STORAGE_KEYS.PAYMENTS, DEFAULT_PAYMENTS, clubId))
     const [clientsCount, setClientsCount] = useState(() => {
-        const c = loadLocal(STORAGE_KEYS.CLIENTS, DEFAULT_CLIENTS)
+        const c = loadLocal(STORAGE_KEYS.CLIENTS, DEFAULT_CLIENTS, clubId)
         return c ? c.length : 0
     })
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
+        // Filial o'zgarganda ma'lumotlarni qayta yuklaymiz
+        setPayments(loadLocal(STORAGE_KEYS.PAYMENTS, DEFAULT_PAYMENTS, clubId))
+        const c = loadLocal(STORAGE_KEYS.CLIENTS, DEFAULT_CLIENTS, clubId)
+        setClientsCount(c ? c.length : 0)
+
         if (ENABLE_SUPABASE) {
             fetchBackgroundStats()
         }
-    }, [])
+    }, [clubId])
 
     const fetchBackgroundStats = async () => {
         if (!ENABLE_SUPABASE) return
         try {
             if (!supabase) return
-            const { data: paymentsData } = await supabase
+            let query = supabase
                 .from('payments')
                 .select('*')
                 .order('paid_at', { ascending: false })
-            if (paymentsData && paymentsData.length > 0) {
-                setPayments(paymentsData)
-                saveLocal(STORAGE_KEYS.PAYMENTS, paymentsData)
+
+            if (clubId) {
+                query = query.eq('club_id', clubId)
             }
 
-            const { count } = await supabase
+            const { data: paymentsData } = await query
+            if (paymentsData && paymentsData.length > 0) {
+                setPayments(paymentsData)
+                saveLocal(STORAGE_KEYS.PAYMENTS, paymentsData, clubId)
+            }
+
+            let clientQuery = supabase
                 .from('clients')
                 .select('*', { count: 'exact', head: true })
+
+            if (clubId) {
+                clientQuery = clientQuery.eq('club_id', clubId)
+            }
+
+            const { count } = await clientQuery
             if (count !== null && count !== undefined) {
                 setClientsCount(count)
             }
@@ -100,14 +117,21 @@ export default function Statistics() {
 
     return (
         <div className="p-6 min-h-screen">
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                            <Building2 size={12} />
+                            {currentClub?.name || "Filial"}
+                        </span>
+                        <span className="text-slate-400 text-xs">Alohida kassa hisoboti</span>
+                    </div>
                     <h1 className="text-white text-2xl font-bold">Hisobot va Statistika</h1>
-                    <p className="text-slate-400 text-sm mt-1">Klubingizning barcha to'lovlari va moliyaviy hisobotlari</p>
+                    <p className="text-slate-400 text-sm mt-1">Ushbu filialning barcha to'lovlari va moliyaviy hisobotlari</p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3 py-1.5 rounded-xl font-medium">
+                <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3 py-1.5 rounded-xl font-medium self-start sm:self-auto">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    LocalStorage faol
+                    Filial hisoboti faol
                 </div>
             </div>
 
@@ -119,7 +143,7 @@ export default function Statistics() {
             ) : (
                 <>
                     {/* Quick Stats Grid */}
-                    <div className="grid grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                         {stats.map((s, i) => (
                             <div key={i} className="rounded-2xl bg-[#1a1630] border border-[#2d2556] p-5">
                                 <div className="flex items-start justify-between mb-4">
@@ -137,9 +161,9 @@ export default function Statistics() {
                         ))}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-6 mb-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                         {/* Popular Rooms */}
-                        <div className="col-span-2 rounded-2xl bg-[#1a1630] border border-[#2d2556] p-6">
+                        <div className="lg:col-span-2 rounded-2xl bg-[#1a1630] border border-[#2d2556] p-6">
                             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
                                 <BarChart3 size={18} className="text-violet-400" />
                                 Xonalar bo'yicha tushum
@@ -160,7 +184,7 @@ export default function Statistics() {
                                     </div>
                                 ))}
                                 {roomStats.length === 0 && (
-                                    <p className="text-slate-500 text-xs text-center py-6">Hozircha ma'lumotlar yo'q</p>
+                                    <p className="text-slate-500 text-xs text-center py-6">Hozircha to'lovlar yo'q</p>
                                 )}
                             </div>
                         </div>
@@ -171,9 +195,9 @@ export default function Statistics() {
                                 <div className="w-12 h-12 rounded-xl bg-violet-600/30 flex items-center justify-center mb-4 border border-violet-500/40">
                                     <TrendingUp size={24} className="text-violet-400" />
                                 </div>
-                                <h4 className="text-white font-bold text-lg mb-2">Moliyaviy xavfsizlik</h4>
+                                <h4 className="text-white font-bold text-lg mb-2">Mustaqil Filial Kassasi</h4>
                                 <p className="text-slate-300 text-xs leading-relaxed mb-4">
-                                    Barcha to'lovlar, xona hisobotlari va kassa yozuvlari avtomatik tarzda brauzer LocalStorage'ida va Supabase bazasida saqlanadi.
+                                    Ushbu filialning barcha to'lovlari va tushumlari faqat o'z hisobida saqlanadi va boshqa filiallarga aralashmaydi.
                                 </p>
                             </div>
                             <div className="bg-[#0f0c1e]/70 rounded-xl p-4 border border-[#2d2556]">

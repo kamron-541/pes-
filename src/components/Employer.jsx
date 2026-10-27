@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Briefcase, UserPlus, Shield, Clock, Phone, Mail, MoreHorizontal, Trash2, DollarSign, History, Plus } from 'lucide-react'
+import { Briefcase, UserPlus, Shield, Clock, Phone, Mail, MoreHorizontal, Trash2, DollarSign, History, Plus, Building2 } from 'lucide-react'
 
-export default function Employer({ staff, addStaff, removeStaff, expenses, addExpense }) {
+export default function Employer({ staff, addStaff, removeStaff, expenses, addExpense, currentClub }) {
     const [showForm, setShowForm] = useState(false)
     const [showExpenseModal, setShowExpenseModal] = useState(null) // staffId
     const [expenseForm, setExpenseForm] = useState({ amount: '', reason: 'Obed uchun' })
@@ -38,10 +38,17 @@ export default function Employer({ staff, addStaff, removeStaff, expenses, addEx
 
     return (
         <div className="p-6 min-h-screen">
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                            <Building2 size={12} />
+                            {currentClub?.name || "Filial"}
+                        </span>
+                        <span className="text-slate-400 text-xs">Xodimlar tarkibi</span>
+                    </div>
                     <h1 className="text-white text-2xl font-bold">Xodimlar</h1>
-                    <p className="text-slate-400 text-sm mt-1">Klub xodimlari va ularning rollari</p>
+                    <p className="text-slate-400 text-sm mt-1">{currentClub?.name || 'Klub'} xodimlari va ularning rollari</p>
                 </div>
                 <button
                     onClick={() => setShowForm(true)}

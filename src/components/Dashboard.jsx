@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Clock, AlertTriangle, Play, DoorOpen, Tv, Users, Activity, Plus, Trash2 } from 'lucide-react'
+import { Clock, AlertTriangle, Play, DoorOpen, Tv, Users, Activity, Plus, Trash2, Building2 } from 'lucide-react'
 
 function formatTime(seconds) {
     if (seconds <= 0) return '00:00'
@@ -23,7 +23,7 @@ function useTimer() {
 }
 
 // ─── Active Room Card ─────────────────────────────────────────────
-function ActiveRoomCard({ room, onStop, onAddOrder }) {
+function ActiveRoomCard({ room, onStop, onAddOrder, settings }) {
     const now = useTimer()
     const isOchiq = room.isOpen;
     
@@ -34,7 +34,9 @@ function ActiveRoomCard({ room, onStop, onAddOrder }) {
     
     const isOverdue = !isOchiq && now > room.endTime;
     const overdueSeconds = isOverdue ? Math.floor((now - room.endTime) / 1000) : 0;
-    const isWarning = !isOchiq && !isOverdue && timeValue <= 300;
+    const warnSec = (Number(settings?.warnMinutes) || 5) * 60;
+    const isAutoNotify = settings?.autoNotify !== false;
+    const isWarning = isAutoNotify && !isOchiq && !isOverdue && timeValue <= warnSec;
     
     const roomCost = isOchiq 
         ? Math.floor((timeValue / 3600) * room.price) 
@@ -365,11 +367,18 @@ function AddOrderModal({ onAdd, onClose, menuItems }) {
 }
 
 // ─── Add Room Modal ────────────────────────────────────────────────
-function AddRoomModal({ onAdd, onClose }) {
+function AddRoomModal({ onAdd, onClose, settings }) {
+    const defaultReg = Number(settings?.regularPrice) || 8000
+    const defaultVip = Number(settings?.vipPrice) || 15000
     const [name, setName] = useState('')
     const [type, setType] = useState('Oddiy')
-    const [price, setPrice] = useState(8000)
+    const [price, setPrice] = useState(defaultReg)
     const [capacity, setCapacity] = useState(2)
+
+    const handleTypeChange = (newType) => {
+        setType(newType)
+        setPrice(newType === 'VIP' ? defaultVip : defaultReg)
+    }
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -388,9 +397,9 @@ function AddRoomModal({ onAdd, onClose }) {
                     </div>
                     <div>
                         <label className="block text-slate-400 text-xs mb-1">Turi</label>
-                        <select value={type} onChange={e => setType(e.target.value)} className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition">
-                            <option value="Oddiy">Oddiy</option>
-                            <option value="VIP">VIP</option>
+                        <select value={type} onChange={e => handleTypeChange(e.target.value)} className="w-full bg-[#0f0c1e] border border-[#2d2556] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition">
+                            <option value="Oddiy">Oddiy ({defaultReg.toLocaleString()} so'm)</option>
+                            <option value="VIP">VIP ({defaultVip.toLocaleString()} so'm)</option>
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -417,7 +426,8 @@ function AddRoomModal({ onAdd, onClose }) {
 export default function Dashboard({ 
     freeRooms, setFreeRooms, addFreeRoom, removeFreeRoom,
     activeRooms, setActiveRooms, startSession, stopSession,
-    addOrderToSession, savePayment, setActivePage, menuItems 
+    addOrderToSession, savePayment, setActivePage, menuItems,
+    currentClub, settings
 }) {
     const [modalRoom, setModalRoom] = useState(null)
     const [receiptData, setReceiptData] = useState(null)
@@ -491,10 +501,17 @@ export default function Dashboard({
     return (
         <div className="p-6 min-h-screen">
             {/* Header */}
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                            <Building2 size={12} />
+                            {currentClub?.name || "Filial"}
+                        </span>
+                        <span className="text-slate-400 text-xs">Jonli kassa va xonalar</span>
+                    </div>
                     <h1 className="text-white text-2xl font-bold">Dashboard</h1>
-                    <p className="text-slate-400 text-sm mt-1">PlayStation Klub – Boshqaruv paneli</p>
+                    <p className="text-slate-400 text-sm mt-1">{currentClub?.name || 'PlayStation Klub'} – Xonalar boshqaruvi</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-[#1a1630] border border-[#2d2556] text-slate-400 text-sm px-4 py-2 rounded-xl">
@@ -582,7 +599,7 @@ export default function Dashboard({
                             {activeRooms
                                 .filter(r => activeFilter === 'overdue' ? (Date.now() > r.endTime && !r.isOpen) : true)
                                 .map(room => (
-                                <ActiveRoomCard key={room.id} room={room} onStop={handleStop} onAddOrder={handleAddOrder} />
+                                <ActiveRoomCard key={room.id} room={room} onStop={handleStop} onAddOrder={handleAddOrder} settings={settings} />
                             ))}
                         </div>
                     )}
@@ -591,7 +608,7 @@ export default function Dashboard({
             </div>
 
             {/* Modals */}
-            {showAddRoom && <AddRoomModal onAdd={handleAddRoom} onClose={() => setShowAddRoom(false)} />}
+            {showAddRoom && <AddRoomModal onAdd={handleAddRoom} onClose={() => setShowAddRoom(false)} settings={settings} />}
             {modalRoom && (
                 <StartModal room={modalRoom} onConfirm={handleConfirm} onClose={() => setModalRoom(null)} />
             )}

@@ -1,21 +1,73 @@
-import { useState } from 'react'
-import { Save, Store, Clock, DollarSign, Bell, Trash2, PlusCircle, RotateCcw, AlertTriangle } from 'lucide-react'
-import { STORAGE_KEYS, DEFAULT_SETTINGS, loadLocal, saveLocal, resetAllDataToCleanSlate } from '../lib/storage'
+import { useState, useEffect } from 'react'
+import { Save, Store, Clock, DollarSign, Bell, Trash2, PlusCircle, RotateCcw, AlertTriangle, Building2, KeyRound } from 'lucide-react'
+import { STORAGE_KEYS, DEFAULT_SETTINGS, loadLocal, saveLocal, resetAllDataToCleanSlate, updateClub } from '../lib/storage'
 
-export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
+export default function Settings({
+    menuItems,
+    addMenuItem,
+    removeMenuItem,
+    clubId,
+    currentClub,
+    onClubUpdated,
+    onRoomsUpdated,
+    onSettingsUpdated
+}) {
     const [newProduct, setNewProduct] = useState({ name: '', price: '' })
-    const [settings, setSettings] = useState(() => loadLocal(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS))
+    const [settings, setSettings] = useState(() => {
+        const loaded = loadLocal(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, clubId)
+        return {
+            ...DEFAULT_SETTINGS,
+            ...loaded,
+            clubName: currentClub?.name || loaded?.clubName || DEFAULT_SETTINGS.clubName,
+            address: currentClub?.address || loaded?.address || DEFAULT_SETTINGS.address
+        }
+    })
     const [saved, setSaved] = useState(false)
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
+    useEffect(() => {
+        const loaded = loadLocal(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, clubId)
+        setSettings({
+            ...DEFAULT_SETTINGS,
+            ...loaded,
+            clubName: currentClub?.name || loaded?.clubName || DEFAULT_SETTINGS.clubName,
+            address: currentClub?.address || loaded?.address || DEFAULT_SETTINGS.address
+        })
+    }, [clubId, currentClub])
+
     const handleSave = () => {
-        saveLocal(STORAGE_KEYS.SETTINGS, settings)
+        saveLocal(STORAGE_KEYS.SETTINGS, settings, clubId)
+
+        // Filial nomi va manzilini markaziy klublar ro'yxatida yangilash
+        if (clubId && currentClub) {
+            updateClub(clubId, {
+                name: settings.clubName,
+                address: settings.address
+            })
+            if (onClubUpdated) onClubUpdated()
+        }
+
+        // Yangi narx sozlamalarini mavjud xonalarga ham darhol tatbiq etish
+        const vipP = Number(settings.vipPrice) || 15000
+        const regP = Number(settings.regularPrice) || 8000
+        const currentFree = loadLocal(STORAGE_KEYS.FREE_ROOMS, [], clubId)
+        if (Array.isArray(currentFree) && currentFree.length > 0) {
+            const updatedRooms = currentFree.map(r => ({
+                ...r,
+                price: (r.type === 'VIP' || String(r.name).toUpperCase().includes('VIP')) ? vipP : regP
+            }))
+            saveLocal(STORAGE_KEYS.FREE_ROOMS, updatedRooms, clubId)
+            if (onRoomsUpdated) onRoomsUpdated(updatedRooms)
+        }
+
+        if (onSettingsUpdated) onSettingsUpdated(settings)
+
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
     }
 
     const handleResetAll = () => {
-        resetAllDataToCleanSlate()
+        resetAllDataToCleanSlate(clubId)
         window.location.reload()
     }
 
@@ -24,8 +76,15 @@ export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
     return (
         <div className="p-6 min-h-screen max-w-2xl">
             <div className="mb-8">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                        <Building2 size={12} />
+                        {currentClub?.name || "Filial"}
+                    </span>
+                    <span className="text-slate-400 text-xs font-mono">PIN: {currentClub?.pin || '1111'}</span>
+                </div>
                 <h1 className="text-white text-2xl font-bold">Sozlamalar</h1>
-                <p className="text-slate-400 text-sm mt-1">Klub konfiguratsiyasi</p>
+                <p className="text-slate-400 text-sm mt-1">Ushbu filialning konfiguratsiyasi va narxlari</p>
             </div>
 
             <div className="space-y-4">
@@ -33,11 +92,11 @@ export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
                 <div className="rounded-2xl bg-[#1a1630] border border-[#2d2556] p-6">
                     <div className="flex items-center gap-2 mb-5">
                         <Store size={16} className="text-violet-400" />
-                        <h2 className="text-white font-semibold">Klub ma'lumotlari</h2>
+                        <h2 className="text-white font-semibold">Filial ma'lumotlari</h2>
                     </div>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-slate-400 text-xs mb-1">Klub nomi</label>
+                            <label className="block text-slate-400 text-xs mb-1">Filial nomi</label>
                             <input value={settings.clubName} onChange={e => setSettings(s => ({ ...s, clubName: e.target.value }))} className={inputCls} />
                         </div>
                         <div>
@@ -114,7 +173,7 @@ export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                             <PlusCircle size={18} className="text-emerald-400" />
-                            <h2 className="text-white font-semibold">Mahsulotlarni boshqarish</h2>
+                            <h2 className="text-white font-semibold">Ushbu filial bar mahsulotlari</h2>
                         </div>
                     </div>
                     
@@ -185,17 +244,17 @@ export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
                 <div className="rounded-2xl bg-red-950/20 border border-red-900/40 p-6 mt-8">
                     <div className="flex items-center gap-2 mb-2">
                         <RotateCcw size={18} className="text-red-400" />
-                        <h2 className="text-white font-semibold">Tizimni tozalash (Sotuvga tayyorlash)</h2>
+                        <h2 className="text-white font-semibold">Faqat ushbu filialni tozalash</h2>
                     </div>
                     <p className="text-slate-400 text-xs mb-4 leading-relaxed">
-                        Saytni yangi xaridorga topshirishdan oldin barcha eski test kassa ma'lumotlari, seanslar, mijozlar va xarajatlarni 0 ga tushiradi. Xonalar va menyu toza standart holatda qoladi.
+                        Faqatgina <b>{currentClub?.name}</b> kassa ma'lumotlarini 0 ga tushiradi. Boshqa filiallarga umuman ta'sir qilmaydi.
                     </p>
                     <button
                         type="button"
                         onClick={() => setShowResetConfirm(true)}
                         className="w-full py-2.5 rounded-xl bg-red-900/30 hover:bg-red-900/50 text-red-400 text-xs font-bold border border-red-800/40 hover:border-red-600 transition flex items-center justify-center gap-2 cursor-pointer"
                     >
-                        <RotateCcw size={14} /> Barcha ma'lumotlarni 0 ga tushirish
+                        <RotateCcw size={14} /> Ushbu filial ma'lumotlarini 0 ga tushirish
                     </button>
                 </div>
             </div>
@@ -207,9 +266,9 @@ export default function Settings({ menuItems, addMenuItem, removeMenuItem }) {
                         <div className="w-12 h-12 rounded-xl bg-red-900/30 border border-red-700/40 flex items-center justify-center mx-auto mb-4 text-red-400">
                             <AlertTriangle size={24} />
                         </div>
-                        <h3 className="text-white font-bold text-center text-lg mb-2">Barchasini nolga tushirish?</h3>
+                        <h3 className="text-white font-bold text-center text-lg mb-2">Filialni nolga tushirish?</h3>
                         <p className="text-slate-400 text-xs text-center mb-6 leading-relaxed">
-                            Barcha test seanslari, to'lovlar tarixi (kassa), kommunal to'lovlar va mijozlar to'liq o'chiriladi. 9 ta xona va menyu toza holatda qoladi. Sayt sotishga tayyor bo'ladi.
+                            Faqat {currentClub?.name} seanslari va to'lovlar tarixi o'chiriladi. 9 ta xona va menyu toza holatda qoladi.
                         </p>
                         <div className="flex gap-3">
                             <button

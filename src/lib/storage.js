@@ -1,6 +1,9 @@
 import { supabase } from './supabase'
 
 export const STORAGE_KEYS = {
+  CLUBS: 'ps_clubs',
+  CURRENT_CLUB_ID: 'ps_current_club_id',
+  AUTH_SESSION: 'ps_auth_session',
   FREE_ROOMS: 'ps_free_rooms',
   ACTIVE_ROOMS: 'ps_active_rooms',
   PAYMENTS: 'ps_payments',
@@ -11,6 +14,45 @@ export const STORAGE_KEYS = {
   CLIENTS: 'ps_clients',
   BOOKINGS: 'ps_bookings',
   SETTINGS: 'ps_settings',
+}
+
+// Standart filiallar (Multi-Branch boshlang'ich klublar)
+export const DEFAULT_CLUBS = [
+  {
+    id: 'club_1',
+    name: '1-Filial (Markaziy)',
+    address: 'Chilonzor tumani, Bunyodkor shoh ko‘chasi',
+    phone: '+998 90 123 45 67',
+    pin: '1111',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'club_2',
+    name: '2-Filial (Yunusobod)',
+    address: 'Yunusobod tumani, Amir Temur ko‘chasi',
+    phone: '+998 90 234 56 78',
+    pin: '2222',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'club_3',
+    name: '3-Filial (Sergeli)',
+    address: 'Sergeli tumani, Yangi Sergeli ko‘chasi',
+    phone: '+998 90 345 67 89',
+    pin: '3333',
+    createdAt: new Date().toISOString()
+  }
+]
+
+// Super Admin (Boshqaruvchi) maxsus master PIN kodi
+export const SUPER_ADMIN_PIN = '7777'
+
+export function getSuperAdminPin() {
+  return loadLocal('ps_admin_pin', SUPER_ADMIN_PIN)
+}
+
+export function setSuperAdminPin(newPin) {
+  saveLocal('ps_admin_pin', newPin)
 }
 
 // Sotishga tayyor toza xonalar (9 ta standart xona)
@@ -63,65 +105,172 @@ export const DEFAULT_SETTINGS = {
 // Barcha ma'lumotlar 100% ishonchli va xatosiz LocalStorage da saqlanadi
 export const ENABLE_SUPABASE = false
 
-// LocalStorage helpers
-export function loadLocal(key, defaultValue) {
+// Filial bo'yicha LocalStorage kalitini olish
+export function getClubStorageKey(baseKey, clubId) {
+  if (!clubId) return baseKey
+  const suffix = baseKey.startsWith('ps_') ? baseKey.substring(3) : baseKey
+  return `ps_${clubId}_${suffix}`
+}
+
+// LocalStorage helpers (filial bo'yicha ajratilgan)
+export function loadLocal(key, defaultValue, clubId = null) {
   try {
-    const raw = localStorage.getItem(key)
+    const finalKey = clubId ? getClubStorageKey(key, clubId) : key
+    const raw = localStorage.getItem(finalKey)
     if (!raw || raw === 'null' || raw === 'undefined') {
-      if (defaultValue !== undefined) {
-        localStorage.setItem(key, JSON.stringify(defaultValue))
+      let initVal = defaultValue
+
+      // Agar yangi filial bo'lsa va sozlamalar so'ralsa, filial ma'lumotlarini qo'yamiz
+      if (key === STORAGE_KEYS.SETTINGS && clubId) {
+        const clubs = loadLocal(STORAGE_KEYS.CLUBS, DEFAULT_CLUBS)
+        const cl = clubs.find(c => c.id === clubId)
+        if (cl) {
+          initVal = {
+            ...DEFAULT_SETTINGS,
+            clubName: cl.name,
+            address: cl.address || DEFAULT_SETTINGS.address
+          }
+        }
       }
-      return defaultValue
+
+      if (initVal !== undefined) {
+        localStorage.setItem(finalKey, JSON.stringify(initVal))
+      }
+      return initVal
     }
 
-    const parsed = JSON.parse(raw)
-
-    // Xonalar uchun maxsus tekshiruv: agar bo'sh xonalar ham, band xonalar ham bo'sh bo'lsa, boshlang'ich 9 ta xonani yuklaymiz
-    if (key === STORAGE_KEYS.FREE_ROOMS) {
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        let activeCount = 0
-        try {
-          const activeRaw = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROOMS)
-          const active = activeRaw ? JSON.parse(activeRaw) : []
-          activeCount = Array.isArray(active) ? active.length : 0
-        } catch {
-          activeCount = 0
-        }
-        if (activeCount === 0) {
-          localStorage.setItem(key, JSON.stringify(DEFAULT_ROOMS))
-          return DEFAULT_ROOMS
-        }
-        return []
-      }
-    }
-
-    return parsed
+    return JSON.parse(raw)
   } catch (err) {
     console.warn(`localStorage o'qishda xatolik (${key}):`, err)
     return defaultValue
   }
 }
 
-export function saveLocal(key, value) {
+export function saveLocal(key, value, clubId = null) {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    const finalKey = clubId ? getClubStorageKey(key, clubId) : key
+    localStorage.setItem(finalKey, JSON.stringify(value))
   } catch (err) {
     console.warn(`localStorage ga yozishda xatolik (${key}):`, err)
   }
 }
 
-// Butun tizimni sotuvga tayyor qilib tozalash (Nolga tushirish)
-export function resetAllDataToCleanSlate() {
-  localStorage.setItem(STORAGE_KEYS.FREE_ROOMS, JSON.stringify(DEFAULT_ROOMS))
-  localStorage.setItem(STORAGE_KEYS.ACTIVE_ROOMS, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.UTILITIES, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.MENU_ITEMS, JSON.stringify(DEFAULT_MENU))
-  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(DEFAULT_STAFF))
-  localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify([]))
-  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS))
+// Barcha filiallar ro'yxatini olish
+export function getAllClubs() {
+  return loadLocal(STORAGE_KEYS.CLUBS, DEFAULT_CLUBS)
+}
+
+// Barcha filiallarni saqlash
+export function saveAllClubs(clubs) {
+  saveLocal(STORAGE_KEYS.CLUBS, clubs)
+}
+
+// Yangi filial yaratish va uning standart xonalarini sozlash
+export function createNewClub({ name, address, phone, pin }) {
+  const clubs = getAllClubs()
+  const newId = 'club_' + Date.now()
+  const newClub = {
+    id: newId,
+    name: name.trim(),
+    address: (address || '').trim(),
+    phone: (phone || '').trim(),
+    pin: pin || '1111',
+    createdAt: new Date().toISOString()
+  }
+
+  // Yangi filial uchun barcha boshlang'ich ma'lumotlarni yaratamiz
+  saveLocal(STORAGE_KEYS.FREE_ROOMS, DEFAULT_ROOMS, newId)
+  saveLocal(STORAGE_KEYS.ACTIVE_ROOMS, [], newId)
+  saveLocal(STORAGE_KEYS.MENU_ITEMS, DEFAULT_MENU, newId)
+  saveLocal(STORAGE_KEYS.STAFF, [
+    { id: 1, name: `${newClub.name} Admin`, role: 'Admin', phone: newClub.phone || '+998 90 123 45 67', status: 'Ishda' }
+  ], newId)
+  saveLocal(STORAGE_KEYS.EXPENSES, [], newId)
+  saveLocal(STORAGE_KEYS.PAYMENTS, [], newId)
+  saveLocal(STORAGE_KEYS.CLIENTS, [], newId)
+  saveLocal(STORAGE_KEYS.BOOKINGS, [], newId)
+  saveLocal(STORAGE_KEYS.UTILITIES, [], newId)
+  saveLocal(STORAGE_KEYS.SETTINGS, {
+    ...DEFAULT_SETTINGS,
+    clubName: newClub.name,
+    address: newClub.address || DEFAULT_SETTINGS.address
+  }, newId)
+
+  const updatedClubs = [...clubs, newClub]
+  saveAllClubs(updatedClubs)
+  return newClub
+}
+
+// Filialni yangilash
+export function updateClub(clubId, updatedFields) {
+  const clubs = getAllClubs()
+  const updated = clubs.map(c => c.id === clubId ? { ...c, ...updatedFields } : c)
+  saveAllClubs(updated)
+  return updated
+}
+
+// Filialni o'chirish
+export function deleteClub(clubId) {
+  const clubs = getAllClubs()
+  const updated = clubs.filter(c => c.id !== clubId)
+  saveAllClubs(updated)
+  return updated
+}
+
+// Filial bo'yicha umumiy hisobotlarni olish (Super Admin paneli uchun)
+export function getClubSummary(clubId) {
+  try {
+    const payments = loadLocal(STORAGE_KEYS.PAYMENTS, [], clubId)
+    const activeRooms = loadLocal(STORAGE_KEYS.ACTIVE_ROOMS, [], clubId)
+    const freeRooms = loadLocal(STORAGE_KEYS.FREE_ROOMS, DEFAULT_ROOMS, clubId)
+    const clients = loadLocal(STORAGE_KEYS.CLIENTS, [], clubId)
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayPayments = payments.filter(p => {
+      const pDate = p.paid_at ? p.paid_at.split('T')[0] : ''
+      return pDate === todayStr
+    })
+
+    const todayIncome = todayPayments.reduce((sum, p) => sum + (Number(p.total) || 0), 0)
+    const totalIncome = payments.reduce((sum, p) => sum + (Number(p.total) || 0), 0)
+
+    return {
+      todayIncome,
+      totalIncome,
+      activeCount: activeRooms.length,
+      freeCount: freeRooms.length,
+      totalRooms: activeRooms.length + freeRooms.length,
+      clientsCount: clients.length,
+      paymentsCount: payments.length,
+      lastPaymentTime: payments[0]?.paid_at || null
+    }
+  } catch (e) {
+    console.error('getClubSummary error:', e)
+    return {
+      todayIncome: 0,
+      totalIncome: 0,
+      activeCount: 0,
+      freeCount: 9,
+      totalRooms: 9,
+      clientsCount: 0,
+      paymentsCount: 0,
+      lastPaymentTime: null
+    }
+  }
+}
+
+// Butun tizimni yoki ma'lum bir filialni tozalash
+export function resetAllDataToCleanSlate(clubId = null) {
+  saveLocal(STORAGE_KEYS.FREE_ROOMS, DEFAULT_ROOMS, clubId)
+  saveLocal(STORAGE_KEYS.ACTIVE_ROOMS, [], clubId)
+  saveLocal(STORAGE_KEYS.PAYMENTS, [], clubId)
+  saveLocal(STORAGE_KEYS.UTILITIES, [], clubId)
+  saveLocal(STORAGE_KEYS.MENU_ITEMS, DEFAULT_MENU, clubId)
+  saveLocal(STORAGE_KEYS.STAFF, DEFAULT_STAFF, clubId)
+  saveLocal(STORAGE_KEYS.EXPENSES, [], clubId)
+  saveLocal(STORAGE_KEYS.CLIENTS, [], clubId)
+  saveLocal(STORAGE_KEYS.BOOKINGS, [], clubId)
+  saveLocal(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, clubId)
 }
 
 // Background Supabase sync helper (faqat ENABLE_SUPABASE yoqilganda ishlaydi)
