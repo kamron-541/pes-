@@ -61,6 +61,7 @@ export default function Utilities({ clubId, currentClub }) {
     e.preventDefault();
     if (!form.amount) return;
 
+    const nowIso = new Date().toISOString();
     const newUtil = {
       id: Date.now(),
       name: typeLabels[form.type],
@@ -68,6 +69,8 @@ export default function Utilities({ clubId, currentClub }) {
       amount: Number(form.amount),
       month: form.month || 'Oktabr 2026',
       paid: false,
+      created_at: nowIso,
+      paid_at: null,
     };
 
     const updated = [newUtil, ...utilities];
@@ -80,7 +83,18 @@ export default function Utilities({ clubId, currentClub }) {
   };
 
   const handleTogglePaid = async (id, currentPaid) => {
-    const updated = utilities.map(u => u.id === id ? { ...u, paid: !currentPaid } : u);
+    const nowIso = new Date().toISOString();
+    const updated = utilities.map(u => {
+      if (u.id === id) {
+        const nextPaid = !currentPaid;
+        return {
+          ...u,
+          paid: nextPaid,
+          paid_at: nextPaid ? (u.paid_at || nowIso) : null
+        };
+      }
+      return u;
+    });
     setUtilities(updated);
     saveLocal(STORAGE_KEYS.UTILITIES, updated, clubId);
     safeSupabaseSync(() => supabase.from('utilities').update({ paid: !currentPaid }).eq('id', id).eq('club_id', clubId));
